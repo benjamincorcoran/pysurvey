@@ -38,13 +38,12 @@ def generate_template(wb):
         else: 
             ranges[dn.name] = {"namedRange":dn.name, "range":dn.attr_text}
     
-    meta['fpath'] = pathlib.Path(filePath).resolve(strict=True)
     return dict(ranges=ranges, meta=meta, wb=wb)
 
 
-def load_from_workbook(filePath, template):
+def load_from_workbook(wb, template):
 
-    wb = load_workbook(filename=filePath)
+    
     data = dict()
     for nr, details in template['ranges'].items():
         dataSheet, dataRange = details['range'].split('!')
@@ -98,22 +97,24 @@ def load_survey_data(filePath, template):
 
 
 fPath = './BasicWorkbook.xlsx'
-
+wb = open_file(fPath)
 print('Generating Template... Done.')
-tplt = generate_template(fPath)
+tplt = generate_template(wb)
 
 print('\n\nRead default values:')
-data = load_from_workbook(fPath, tplt)
+data = load_from_workbook(wb, tplt)
 print(data)
 
 print('\n\nCreate new workbook from template:')
 create_workbook_from_template(tplt,'Basic_8888888.xlsx','./')
 
 print('\n\nLoad updated survey data:')
-data2 = load_survey_data('./Basic_8888888.xlsx', tplt)
+wb2 = open_file('./Basic_8888888.xlsx')
+data2 = load_survey_data(wb2, tplt)
 print(data2)
 
 print('\n\nLoad edited workbook:')
-data3 = load_survey_data('./BrokenWorkbook.xlsx', tplt)
+wb3 = open_file('./BrokenWorkbook.xlsx')
+data3 = load_survey_data(wb3, tplt)
 
 
