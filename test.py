@@ -4,53 +4,29 @@ import panel as pn
 import itertools as it
 pn.extension()
 
-def tableFactory(survey, definition):
-    _tbl = type(f"t_{definition['name']}",(surveyTable,),{})
+def tableFactory(definition):
+    _tbl = type(f"t_{definition['tableTitle']}",(surveyTable,),{})
     tbl = _tbl()
-    tbl.define(survey, definition)
+    tbl.define(**definition)
     
     return tbl
 
-class surveyTab(object):
-    
-    def __init__(self, survey, title, tables):
-        
-        self.title = title
-        self.survey = survey
-        self.tables = [tableFactory(survey, table) for table in tables]
-    
-    def show(self):
-        tabLayout = pn.Column()
-        for table in self.tables:
-            tabLayout.append(table.show())
-
-        return (f"{self.title}", tabLayout)
-    
-    def save(self):
-        tab = []
-        for table in self.tables:
-            tab.append(table.save())
-        return tab
-                
-                
 class surveyTable(param.Parameterized):
     
-    def define(self, survey, definition):
-        self.survey = survey
-                
-        self.tableName = definition['name']
-        self.tableLayout = definition['layout']
-        self.tableDesc = definition['desc']
-        self.specifiedParams = definition['params']
+    def define(self, tableTitle, tableDesc, tableLayout, tableParams):                
+        self.tableTitle = tableTitle
+        self.tableLayout = tableLayout
+        self.tableDesc = tableDesc
+        self.tableParams = tableParams
         
         for x in it.chain(*self.tableLayout):
-            if x in self.specifiedParams.keys():
-                self._add_parameter(x, self.specifiedParams[x])
+            if x in self.tableParams.keys():
+                self._add_parameter(x, self.tableParams[x])
             else:
                 self._add_parameter(x, param.Integer(0))
                 
     def show(self):
-        tbl = pn.Column(pn.pane.Markdown(f"## {self.tableName}"), pn.pane.Markdown(f'{self.tableDesc}'))
+        tbl = pn.Column(pn.pane.Markdown(f"## {self.tableTitle}"), pn.pane.Markdown(f'{self.tableDesc}'))
         
         for row in self.tableLayout:
             r = pn.Row()
@@ -60,25 +36,63 @@ class surveyTable(param.Parameterized):
         
         return tbl
     
+    def iter_parameters(self):
+        for key, parameter in self.param.objects().items():
+            yield parameter
+    
     def save(self):
-        return self.param.get_param_values()
+        return {x[0]:x[1] for x in self.param.get_param_values()}
+                
+                
+class surveyTab(object):
+    
+    def __init__(self, tabTitle, tabDesc, tables):
+        
+        self.tabTitle = tabTitle
+        self.tabDesc = tabDesc
+        self.tables = [tableFactory(table) for table in tables]
+    
+    def show(self):
+        tabLayout = pn.Column()
+        tabLayout.append(pn.pane.Markdown(f'{self.tabDesc}'))
+        for table in self.tables:
+            tabLayout.append(table.show())
 
+        return (f"{self.tabTitle}", tabLayout)
+    
+    def save(self):
+        tab = {}
+        for table in self.tables:
+            tab[table.tableTitle]=table.save()
+        return tab
+
+    def iter_parameters(self):
+        for table in self.tables:
+            yield from table.iter_parameters()
+                
     
 class surveyClass(param.Parameterized):
                 
-    def __init__(self, tabDefs):
-        self.surveyName = "Survey"
-        self.surveyDesc = "A short survey description"
+    def __init__(self, surveyTitle, surveyDesc, tabs):
+        self.surveyTitle = surveyTitle
+        self.surveyDesc = surveyDesc
 
-        self.tabs=[]
-        for tabDef in tabDefs:
-            self.tabs.append(surveyTab(self, **tabDef))
+        self.tabs = []
+        for definition in tabs:
+            self.tabs.append(surveyTab(**definition))
         
-        self.save_button = pn.widgets.Button(name='Save')
-        self.save_button.on_click(self.save)
+        self.saveButton = pn.widgets.Button(name='Save')
+        self.saveButton.on_click(self.save)
+        self.submitButton = pn.widgets.Button(name='Submit')
+        self.submitButton.on_click(self.submit)
+        self.revertButton = pn.widgets.Button(name='Revert')
+        self.revertButton.on_click(self.revert)
+        
+                
+        self.surveyControl = pn.Row(self.saveButton, self.submitButton, self.revertButton)
     
     def show(self):
-        s = pn.Column(self.save_button, pn.pane.Markdown(f"# {self.surveyName}"), f"{self.surveyDesc}")
+        s = pn.Column(self.surveyControl, pn.pane.Markdown(f"# {self.surveyTitle}"), f"{self.surveyDesc}", sizing_mode='stretch_both')
         tabs = pn.Tabs()
         for tab in self.tabs:
             tabs.append(tab.show())
@@ -86,37 +100,70 @@ class surveyClass(param.Parameterized):
         return s
 
     def save(self, event):
-        tabs = []
+        tabs = {}
         for tab in self.tabs:
-            tabs.append(tab.save())
+            tabs[tab.tabTitle]=tab.save()
         
         with open('test.txt', 'w') as f:
-            f.write(json.dumps(tabs))
-        return 1
+            f.write(json.dumps(tabs, indent=4))
+    
+    def iter_parameters(self):
+        for tab in self.tabs:
+            yield from tab.iter_parameters()
+    
+    def submit(self, event):
+        for param in self.iter_parameters():
+            param.constant=True
+    
+    def revert(self, event):
+        for param in self.iter_parameters():
+            param.constant=False
 
-t1 = {
-    'name': 'Table 1',
-    'desc': 'Some table description for table 1.',
-    'layout': [['A','B','C'],['D','E','F']],
-    'params': {'A':param.String('A')}
-}
-t2 = {
-    'name': 'Table 2',
-    'desc': 'Some table description for table 2.',
-    'layout': [['A','H','I'],['J','K','L']],
-    'params': {}
-}
 
-tab1 = {
-    'title': 'Tab 1',
-    'tables': [t1, t2] 
-}
                 
-tab2 = {
-    'title': 'Tab 2',
-    'tables': [t1, t2] 
+                
+surveyDefinition = {
+    'surveyTitle': 'An Example Survey',
+    'surveyDesc': 'A description of the example survey.',
+    'tabs': [
+        {
+            'tabTitle':'Tab 1',
+            'tabDesc': 'A description of the tabbed section.',
+            'tables': [
+                {
+                    'tableTitle':'Table 1',
+                    'tableDesc':'A description of table 1.',
+                    'tableLayout':[['A','B','C'],['D','E','F']],
+                    'tableParams':{'A':param.String('A')}
+                },
+                {
+                    'tableTitle':'Table 2',
+                    'tableDesc':'A description of table 1.',
+                    'tableLayout':[['A'],['J','K','L']],
+                    'tableParams':{'A':param.ObjectSelector(default='Asia', objects=['Africa', 'Asia', 'Europe'])}
+                }
+            ]
+        },
+        {
+            'tabTitle':'Tab 2',
+            'tabDesc': 'A description of the second tabbed section.',
+            'tables': [
+                {
+                    'tableTitle':'Table 3',
+                    'tableDesc':'A description of table 1.',
+                    'tableLayout':[['A','B','C'],['D','E','F']],
+                    'tableParams':{'A':param.String('A')}
+                },
+                {
+                    'tableTitle':'Table 4',
+                    'tableDesc':'A description of table 1.',
+                    'tableLayout':[['A','H','I'],['J','K','L']],
+                    'tableParams':{}
+                }
+            ]
+        }
+    ]
 }
      
-s = surveyClass([tab1,tab2])
+s = surveyClass(**surveyDefinition)
 s.show().servable()
-                
