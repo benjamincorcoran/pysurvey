@@ -65,35 +65,34 @@ class surveyTable(param.Parameterized):
 
     
 class surveyClass(param.Parameterized):
-    
-    save_survey = param.Action(lambda x: x.param.trigger('save_survey'), precedence=0.7)
                 
     def __init__(self, tabDefs):
         self.surveyName = "Survey"
         self.surveyDesc = "A short survey description"
+
         self.tabs=[]
-        
         for tabDef in tabDefs:
             self.tabs.append(surveyTab(self, **tabDef))
+        
+        self.save_button = pn.widgets.Button(name='Save')
+        self.save_button.on_click(self.save)
     
     def show(self):
-        s = pn.Column(pn.pane.Markdown(f"# {self.surveyName}"), f"{self.surveyDesc}")
+        s = pn.Column(self.save_button, pn.pane.Markdown(f"# {self.surveyName}"), f"{self.surveyDesc}")
         tabs = pn.Tabs()
         for tab in self.tabs:
             tabs.append(tab.show())
         s.append(tabs)
         return s
-    
-    @param.depends('save_survey', watch=True)
-    def save(self):
+
+    def save(self, event):
         tabs = []
         for tab in self.tabs:
             tabs.append(tab.save())
         
         with open('test.txt', 'w') as f:
             f.write(json.dumps(tabs))
-        
-        return 0
+        return 1
 
 t1 = {
     'name': 'Table 1',
@@ -119,6 +118,5 @@ tab2 = {
 }
      
 s = surveyClass([tab1,tab2])
-y = pn.Column(pn.panel(s.param), s.show())
+s.show().servable()
                 
-y.servable()
